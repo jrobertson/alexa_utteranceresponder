@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'alexa_utteranceresponder'
-  s.version = '0.1.0'
+  s.version = '0.1.2'
   s.summary = 'Checks an utterance against an invocation keyword from the available skills and returns an Alexa formatted response to be passed to the skill\'s endpoint service.'
   s.authors = ['James Robertson']
   s.files = Dir['lib/alexa_utteranceresponder.rb']
