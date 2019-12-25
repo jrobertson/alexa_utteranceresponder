@@ -16,25 +16,53 @@ class AlexaUtteranceResponder
   attr_reader :invocation
   attr_accessor :deviceid
 
-  def initialize(modelmds=[], debug: false, userid: nil, deviceid: nil)
+  def initialize(modelmds=[], reg: nil, debug: false, 
+                 userid: nil, deviceid: nil)
     
-    @debug, @userid, @deviceid = debug, userid, deviceid
+    @reg, @debug, @userid, @deviceid = reg, debug, userid, deviceid
 
     @models = modelmds.inject({}) do |r,x|
       
       amb = AlexaModelBuilder.new(x)
       r.merge(amb.invocation || amb.name => amb)
       
-    end    
+    end
+
     
   end
   
-  def ask(s, deviceid: @deviceid, &blk)
+  def ask(s, userid: @userid, deviceid: @deviceid, &blk)
     
     puts
     puts '  debugger: s: ' + s.inspect if @debug
 
-    invocations = @models.keys.map {|invocation| invocation.gsub(/ /,'\s') }\
+    active = if @reg then
+    
+      puts 'reg available'.info if @debug
+    
+      e = @reg.get_key 'hkey_apps/alexa/accounts'
+      euserid = e.xpath('*/id').find {|x| x.text.to_s == userid}
+      puts 'euserid: ' + euserid.text.inspect if @debug
+    
+      if euserid then
+        
+        eactive = euserid.parent.text('active')
+        puts 'eactive: ' + eactive.to_s.inspect if @debug
+        
+        if eactive then
+          eactive.to_s.split
+        else
+          user = euserid.parent.name
+          @reg.set_key "hkey_apps/alexa/accounts/#{user}/active", @models.keys.join(' ')
+          @models.keys
+        end
+      end
+
+    else
+      @models.keys
+    end
+
+    invocations = active.map {|invocation| invocation.gsub(/ /,'\s') }\
         .join('|')
     puts 'invocations: ' + invocations.inspect if @debug
     
@@ -48,7 +76,7 @@ class AlexaUtteranceResponder
     r2 = s.downcase.gsub(/,/,'').match(regex)
     
     puts '  debugger: r2: ' + r2.inspect if @debug
-    puts
+    puts    
     
     model_id = if r2 then
       return respond() if r2[:action] == 'open'      
@@ -58,13 +86,16 @@ class AlexaUtteranceResponder
       puts 'searching all utterances'.info if @debug
       puts ('s: ' + s.inspect).debug if @debug
       
+      
       # attempt to find the request from utterances in all skills
-      found = @models.detect do |key, model|
+      active.detect do |name|
+
+        model = @models[name]
         puts 'utterances: ' + model.utterances.map(&:downcase).inspect if @debug
         model.utterances.map(&:downcase).include? s
+        
       end
-      
-      id, _ = found[0] if found
+            
     end
       
     return "hmmm, I don't know that one." unless model_id        
@@ -83,6 +114,20 @@ class AlexaUtteranceResponder
     r = aio.ask request, &blk
     
     r ? r : "I'm sorry I didn't understand what you said"
+
+  end
+  
+  def sample_utterances()
+    
+    @models.to_a.sample(3).map do |key, model|
+      
+      if model.invocation then
+        "tell %s, %s" % [key.capitalize, model.utterances.sample.capitalize]
+      else
+        "%s" % [model.utterances.sample]
+      end
+      
+    end
 
   end
 
